@@ -1,5 +1,9 @@
 <manifest version="1.0" type="device">
-    <hal format="aidl">
+    <!-- Ace6 (PLQ110/ktm) 及同平台无 NXP StrongBox 的机型：
+         这里一旦声明 strongbox 实例，keystore2/keymaster 启动时会去枚举并连接
+         IKeyMintDevice/strongbox，而设备上并不存在该服务，导致 keymaster 初始化
+         异常、无法解锁 /data。请在无 strongbox 的机型上保持注释。 -->
+    <!-- <hal format="aidl">
         <name>android.hardware.security.keymint</name>
         <version>3</version>
         <fqname>IKeyMintDevice/strongbox</fqname>
@@ -8,5 +12,5 @@
         <name>android.hardware.security.keymint</name>
         <version>3</version>
         <fqname>IRemotelyProvisionedComponent/strongbox</fqname>
-    </hal>
+    </hal> -->
 </manifest>
