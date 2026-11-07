@@ -1,8 +1,10 @@
 <manifest version="1.0" type="device">
     <!-- secure element -->
-    <hal format="aidl">
+    <!-- Ace6 (ktm) 没有 NXP eSE，声明 ISecureElement/eSE1 会让 OMAPI/keystore
+         去连接不存在的服务，请保持注释。 -->
+    <!-- <hal format="aidl">
         <name>android.hardware.secure_element</name>
         <version>1</version>
         <fqname>ISecureElement/eSE1</fqname>
-    </hal>
+    </hal> -->
 </manifest>
