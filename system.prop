@@ -4,4 +4,6 @@ ro.charger.enable_suspend=true
 # FUSE passthrough
 persist.sys.fuse.passthrough.enable=true
 
+# Ace6 (PLQ110/ktm) 没有 SPU/StrongBox：强制 gatekeeper 使用 TEE 安全等级。
+# 缺这一行时 gatekeeper HAL 可能选择 SPU 后端，导致锁屏密码校验失败、解不开 /data。
 vendor.gatekeeper.is_security_level_spu=0
