@@ -1,2 +1,54 @@
 <manifest version="8.0" type="framework">
+    <!--
+        Recovery HAL manifest.
+
+        In a __ANDROID_RECOVERY__ build, servicemanager only validates AIDL
+        addService() calls against VintfObjectRecovery's *recovery* manifest,
+        which is read from /system/etc/vintf/manifest.xml (this file) plus
+        /system/etc/vintf/manifest/*.xml. /vendor/etc/vintf/ is NOT consulted.
+
+        An empty manifest therefore rejects every AIDL HAL registration:
+        gatekeeper aborts (Check failed: status == STATUS_OK), keymint never
+        publishes IKeyMintDevice/default, keystore2 loops on "Cannot connect to
+        Keymint", and metadata (DE) decryption of /data fails with
+        "Unable to decrypt metadata encryption" because the wrapped key cannot
+        be unwrapped. Declare the HALs recovery actually uses.
+    -->
+    <hal format="aidl">
+        <name>android.hardware.gatekeeper</name>
+        <version>1</version>
+        <fqname>IGatekeeper/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.keymint</name>
+        <version>3</version>
+        <fqname>IKeyMintDevice/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.keymint</name>
+        <version>3</version>
+        <fqname>IRemotelyProvisionedComponent/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.secureclock</name>
+        <fqname>ISecureClock/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.sharedsecret</name>
+        <fqname>ISharedSecret/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.health</name>
+        <version>3</version>
+        <fqname>IHealth/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.boot</name>
+        <fqname>IBootControl/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.vibrator</name>
+        <version>2</version>
+        <fqname>IVibrator/default</fqname>
+    </hal>
 </manifest>
