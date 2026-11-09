@@ -51,4 +51,20 @@
         <version>2</version>
         <fqname>IVibrator/default</fqname>
     </hal>
+    <!--
+        OPLUS touch HAL (device side declares it in
+        /vendor/odm/etc/vintf/manifest/manifest_touch_aidl.xml, which recovery
+        never reads). Without this entry the HAL's addService() is rejected:
+            "Could not find vendor.oplus.hardware.touch.IOplusTouch/default in
+             the VINTF manifest"
+        followed by "Check failed: status == STATUS_OK" and SIGABRT. init then
+        restarts the service every ~5 s; each restart re-initialises the touch
+        IC (syna_enable_hbp_mode / TCM reset), which shows up as laggy touch
+        input while tapping quickly. Declare it here so it registers once.
+    -->
+    <hal format="aidl">
+        <name>vendor.oplus.hardware.touch</name>
+        <version>2</version>
+        <fqname>IOplusTouch/default</fqname>
+    </hal>
 </manifest>
