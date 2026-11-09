@@ -94,17 +94,17 @@ jobs:
         {
           echo 'BUILD_INFO<<EOF'
           echo
-          echo Manifest url: ${{ github.event.inputs.TWRP_MANIFEST_URL }}
-          echo Manifest branch: ${{ github.event.inputs.TWRP_MANIFEST_BRANCH }}
-          echo Recovery UI: $UI_NAME ($UI_DESC)
-          echo Recovery UI source: ${UI_REVISION:-manifest default}
-          echo Device tree url: ${{ github.event.inputs.DEVICE_TREE_URL }}
-          echo Device tree branch: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}
-          echo Device path: ${{ github.event.inputs.DEVICE_PATH }}
-          echo Device name: ${{ github.event.inputs.DEVICE_NAME }}
-          echo Lunch target: $LUNCH_TARGET
-          echo Build target: ${{ github.event.inputs.BUILD_PARTITION }}.img
-          echo Build date: `date`
+          echo "Manifest url: ${{ github.event.inputs.TWRP_MANIFEST_URL }}"
+          echo "Manifest branch: ${{ github.event.inputs.TWRP_MANIFEST_BRANCH }}"
+          echo "Recovery UI: $UI_NAME ($UI_DESC)"
+          echo "Recovery UI source: ${UI_REVISION:-manifest default}"
+          echo "Device tree url: ${{ github.event.inputs.DEVICE_TREE_URL }}"
+          echo "Device tree branch: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}"
+          echo "Device path: ${{ github.event.inputs.DEVICE_PATH }}"
+          echo "Device name: ${{ github.event.inputs.DEVICE_NAME }}"
+          echo "Lunch target: $LUNCH_TARGET"
+          echo "Build target: ${{ github.event.inputs.BUILD_PARTITION }}.img"
+          echo "Build date: `date`"
           echo
           echo EOF
         } >> "$GITHUB_ENV"
