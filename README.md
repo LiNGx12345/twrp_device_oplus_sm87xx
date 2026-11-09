@@ -1,3 +1,6 @@
+解决了Ace6(ktm)无法解密Data的问题,添加TWRP测试版的构建支持
+只是一个自用的魔改复刻,建议还是使用原项目
+
 # TWRP device tree for OPLUS sm87xx sreies
 
 ## Supported devices
