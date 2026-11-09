@@ -3,6 +3,18 @@ name: TWRP 16 Builder
 on:
   workflow_dispatch:
     inputs:
+      RECOVERY_UI:
+        description: "Recovery UI variant: YARP (GUI2/LVGL UI) or TWRP (classic UI)"
+        required: true
+        type: choice
+        default: "YARP"
+        options:
+          - YARP
+          - TWRP
+      RECOVERY_REVISION:
+        description: "Advanced: pin bootable/recovery to any commit/branch (overrides RECOVERY_UI, leave empty normally)"
+        required: false
+        default: ""
       TWRP_MANIFEST_URL:
         description: "TWRP manifest url"
         required: true
@@ -49,20 +61,48 @@ jobs:
     - name: Show build info
       run: |
         if [ -n "${{ github.event.inputs.LUNCH_TARGET }}" ]; then
-          echo "LUNCH_TARGET=${{ github.event.inputs.LUNCH_TARGET }}" >> "$GITHUB_ENV"
+          LUNCH_TARGET="${{ github.event.inputs.LUNCH_TARGET }}"
         else
-          echo "LUNCH_TARGET=${{ github.event.inputs.DEVICE_NAME }}" >> "$GITHUB_ENV"
+          LUNCH_TARGET="${{ github.event.inputs.DEVICE_NAME }}"
         fi
+        echo "LUNCH_TARGET=$LUNCH_TARGET" >> "$GITHUB_ENV"
+
+        # Map the RECOVERY_UI choice to the bootable/recovery source revision.
+        #   YARP -> keep whatever the manifest branch (twrp-<ver>) ships: the
+        #           GUI2 / LVGL interface, i.e. the current TWRP 16 sources.
+        #   TWRP -> the last commit with the classic (non-GUI2) interface:
+        #           0315dbb53c47a0532546b7056f6af71b4dc0ddab
+        #           (direct parent of "recovery: Add GUI2 with LVGL (#37)").
+        UI_NAME="YARP"
+        UI_DESC="YARP (GUI2 / LVGL) interface"
+        UI_REVISION=""
+        case "${{ github.event.inputs.RECOVERY_UI }}" in
+          TWRP|Twrp|twrp)
+            UI_NAME="TWRP"
+            UI_DESC="classic TWRP interface"
+            UI_REVISION="0315dbb53c47a0532546b7056f6af71b4dc0ddab"
+            ;;
+        esac
+        # Advanced override: pin bootable/recovery to an arbitrary revision.
+        if [ -n "${{ github.event.inputs.RECOVERY_REVISION }}" ]; then
+          UI_REVISION="${{ github.event.inputs.RECOVERY_REVISION }}"
+        fi
+        echo "UI_NAME=$UI_NAME" >> "$GITHUB_ENV"
+        echo "UI_DESC=$UI_DESC" >> "$GITHUB_ENV"
+        echo "UI_REVISION=$UI_REVISION" >> "$GITHUB_ENV"
+
         {
           echo 'BUILD_INFO<<EOF'
           echo
           echo Manifest url: ${{ github.event.inputs.TWRP_MANIFEST_URL }}
           echo Manifest branch: ${{ github.event.inputs.TWRP_MANIFEST_BRANCH }}
+          echo Recovery UI: $UI_NAME ($UI_DESC)
+          echo Recovery UI source: ${UI_REVISION:-manifest default}
           echo Device tree url: ${{ github.event.inputs.DEVICE_TREE_URL }}
           echo Device tree branch: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}
           echo Device path: ${{ github.event.inputs.DEVICE_PATH }}
           echo Device name: ${{ github.event.inputs.DEVICE_NAME }}
-          echo Lunch target: ${{ env.LUNCH_TARGET }}
+          echo Lunch target: $LUNCH_TARGET
           echo Build target: ${{ github.event.inputs.BUILD_PARTITION }}.img
           echo Build date: `date`
           echo
@@ -108,15 +148,69 @@ jobs:
         (while true; do echo "Syncing source..."; sleep 60; done) &
         TIP_PID=$!
         repo sync
-        kill $TIP_PID && exit 0
+        SYNC_STATUS=$?
+        kill $TIP_PID 2>/dev/null || true
+        if [ $SYNC_STATUS -ne 0 ]; then
+          echo "::error::repo sync failed (exit code $SYNC_STATUS)"
+          exit $SYNC_STATUS
+        fi
 
     - name: Setup device
       run: |
         git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} device/${{ github.event.inputs.DEVICE_PATH }}
 
+    - name: Select recovery UI
+      run: |
+        cd bootable/recovery
+        echo "Manifest state: $(git rev-parse HEAD) $(git log -1 --pretty=%s)"
+        if [ -n "${UI_REVISION}" ]; then
+          # repo names every git remote after the manifest remote name (here
+          # "twrp-16.0", "aosp", ...), so a plain "origin" usually does not exist.
+          FETCH_URL=""
+          for r in $(git remote); do
+            u=$(git remote get-url "$r" || true)
+            case "$u" in
+              *TWRP-Test*) FETCH_URL="$u"; break ;;
+            esac
+            if [ -z "$FETCH_URL" ]; then
+              FETCH_URL="$u"
+            fi
+          done
+          FETCH_URL="${FETCH_URL:-https://github.com/TWRP-Test/android_bootable_recovery}"
+          echo "Pinning bootable/recovery to ${UI_REVISION} for the ${UI_NAME} variant (from ${FETCH_URL})"
+          if ! git fetch --depth=1 "$FETCH_URL" "${UI_REVISION}"; then
+            echo "::error::Could not fetch bootable/recovery revision ${UI_REVISION}. Use a commit on twrp-16.0 or a branch/tag name in RECOVERY_REVISION."
+            exit 1
+          fi
+          git -c advice.detachedHead=false checkout --detach FETCH_HEAD
+        else
+          echo "Keeping the manifest branch revision for the ${UI_NAME} variant"
+        fi
+        echo "Selected state: $(git rev-parse HEAD) $(git log -1 --pretty=%s)"
+
+        # Fail loudly instead of producing an image with the wrong interface.
+        if [ "$UI_NAME" = "TWRP" ] && [ ! -d gui ]; then
+          echo "::error::The TWRP (classic UI) variant needs bootable/recovery/gui, but it is missing after pinning to ${UI_REVISION}"
+          exit 1
+        fi
+        if [ "$UI_NAME" != "TWRP" ] && [ ! -d gui2 ]; then
+          echo "::error::The YARP variant needs bootable/recovery/gui2, but it is missing"
+          exit 1
+        fi
+
+        {
+          echo "RECOVERY_UI_INFO<<EOF"
+          echo "Recovery UI: ${UI_NAME} (${UI_DESC})"
+          echo "bootable/recovery: $(git rev-parse HEAD)"
+          echo "bootable/recovery subject: $(git log -1 --pretty=%s)"
+          echo EOF
+        } >> "$GITHUB_ENV"
+        echo "IMAGE_PREFIX=${UI_NAME}" >> "$GITHUB_ENV"
+
     - name: Generate build info
       run: |
         echo -e "$BUILD_INFO" >> INFO.txt
+        echo -e "$RECOVERY_UI_INFO" >> INFO.txt
         echo "Change log:" >> INFO.txt
         set +e
         LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null)
@@ -137,28 +231,43 @@ jobs:
         export CCACHE_MAXSIZE=5G
         export USE_CCACHE=1
         lunch twrp_${{ env.LUNCH_TARGET }}
+        echo "Building the ${UI_NAME} variant: $(cd bootable/recovery && git rev-parse HEAD)"
         (while true; do echo `date +%T` "Building TWRP..."; free -h; sleep 10; done) &
         TIP_PID=$!
         m ${{ github.event.inputs.BUILD_PARTITION }}image
-        mv out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ github.event.inputs.BUILD_PARTITION }}.img out/target/product/${{ github.event.inputs.DEVICE_NAME }}/TWRP-3.7.1-16-${{ github.event.inputs.DEVICE_NAME }}-${{ env.BUILD_DATE }}.img
-        kill $TIP_PID && exit 0
+        BUILD_STATUS=$?
+        kill $TIP_PID 2>/dev/null || true
+        if [ $BUILD_STATUS -ne 0 ]; then
+          echo "::error::Build failed (exit code $BUILD_STATUS)"
+          exit $BUILD_STATUS
+        fi
+        IMG_DIR=out/target/product/${{ github.event.inputs.DEVICE_NAME }}
+        IMG_NAME=${IMAGE_PREFIX}-3.7.1-16-${{ github.event.inputs.DEVICE_NAME }}-${BUILD_DATE}.img
+        if [ ! -f "$IMG_DIR/${{ github.event.inputs.BUILD_PARTITION }}.img" ]; then
+          echo "::error::Build finished but $IMG_DIR/${{ github.event.inputs.BUILD_PARTITION }}.img was not produced"
+          exit 1
+        fi
+        mv "$IMG_DIR/${{ github.event.inputs.BUILD_PARTITION }}.img" "$IMG_DIR/$IMG_NAME"
+        echo "IMAGE_PATH=$IMG_DIR/$IMG_NAME" >> "$GITHUB_ENV"
+        echo "IMAGE_NAME=$IMG_NAME" >> "$GITHUB_ENV"
+        echo "ARTIFACT_NAME=${IMG_NAME%.img}" >> "$GITHUB_ENV"
 
     - name: Upload Artifact
       if: ${{ github.event.inputs.SHOULD_RELEASE == 'false' }}
       uses: actions/upload-artifact@v4
       with:
-        name: TWRP-3.7.1-16-${{ github.event.inputs.DEVICE_NAME }}-${{ env.BUILD_DATE }}
+        name: ${{ env.ARTIFACT_NAME }}
         path: |
-          out/target/product/${{ github.event.inputs.DEVICE_NAME }}/TWRP-3.7.1-16-${{ github.event.inputs.DEVICE_NAME }}-${{ env.BUILD_DATE }}.img
+          ${{ env.IMAGE_PATH }}
           device/${{ github.event.inputs.DEVICE_PATH }}/INFO.txt
 
     - name: Upload to Release
       if: ${{ github.event.inputs.SHOULD_RELEASE == 'true' }}
       uses: softprops/action-gh-release@v2
       with:
-        files: | 
-          out/target/product/${{ github.event.inputs.DEVICE_NAME }}/TWRP-3.7.1-16-${{ github.event.inputs.DEVICE_NAME }}-${{ env.BUILD_DATE }}.img
-        name: TWRP-3.7.1-16-${{ github.event.inputs.DEVICE_NAME }}-${{ env.BUILD_DATE }}-${{ github.run_id }}
+        files: |
+          ${{ env.IMAGE_PATH }}
+        name: ${{ env.ARTIFACT_NAME }}-${{ github.run_id }}
         tag_name: ${{ env.BUILD_DATE }}-${{ github.run_id }}
         body_path: device/${{ github.event.inputs.DEVICE_PATH }}/INFO.txt
       env:
